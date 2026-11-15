@@ -187,7 +187,9 @@ static void build_galaxy(int seed)
   for (int i = 0; i < 4; i++) {
     add_uncharted(i < 3 ? 1 : 0, 0, 35, "", '?', c_magenta);
   }
-  srand(time(NULL));
+  // ROGUESTAR_SEED makes a whole voyage repeatable (testing, the preview)
+  const char* fixed = getenv("ROGUESTAR_SEED");
+  srand(fixed && *fixed ? seed + 1 : time(NULL));
 }
 
 static void reveal_vault()
@@ -203,6 +205,10 @@ void voyage_new()
 {
   VOY = Voyage();
   VOY.seed = time(NULL) & 0xffffff;
+  const char* fixed = getenv("ROGUESTAR_SEED");
+  if (fixed && *fixed) {
+    VOY.seed = atoi(fixed);
+  }
   build_galaxy(VOY.seed);
   WORLD = World();
   PLR = Ship();
@@ -560,21 +566,26 @@ void voyage_survey()
           here->name.c_str());
     return;
   }
+  // Uncharted worlds carry a "?" on the star map; not in sentences
+  std::string name = here->name;
+  if (!name.empty() && name[name.size() - 1] == '?') {
+    name.erase(name.size() - 1);
+  }
   if (here->surveyed && here->find != 2) {
-    popup("You have already surveyed %s from pole to pole.",
-          here->name.c_str());
+    popup("You have already surveyed %s from pole to pole.", name.c_str());
     return;
   }
   if (!query_yn("Land a survey team on %s?  It takes three days.",
-                here->name.c_str())) {
+                name.c_str())) {
     return;
   }
   WORLD.advance_days(3);
   here->surveyed = true;
   std::stringstream report;
-  report << "<c=yellow>Survey of " << here->name << "<c=/>\n\n";
+  report << "<c=yellow>Survey of " << name << "<c=/>\n\n";
   report << "A " << here->biome_name << " world, gravity "
-         << here->gravity << "% of standard.\n\n";
+         << here->gravity / 100 << "." << (here->gravity / 10) % 10
+         << here->gravity % 10 << " g.\n\n";
   // Heavy worlds are hard on landers and on people
   if (here->gravity > 150 && rng(1, 100) <= here->gravity / 4) {
     int lost = rng(1, 3);
