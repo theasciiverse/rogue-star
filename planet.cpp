@@ -32,6 +32,9 @@ Planet* planet_at(int x, int y)
 
 Planet::Planet()
 {
+  uncharted = false;
+  surveyed = false;
+  find = 0;
   name = "NULL";
   gravity = 0;
   for (int i = 0; i < NUM_GOODS; i++) {

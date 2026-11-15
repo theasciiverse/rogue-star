@@ -6,6 +6,7 @@
 #include "planet.h"
 #include "globals.h"
 #include "interface.h"
+#include "voyage.h"
 
 void prep_repair_data(std::vector<std::string> &parts_repair_names,
                       std::vector<std::string> &parts_repair_dmg,
@@ -24,12 +25,20 @@ void main_screen()
   Window w_menu(0, 0, 80, 24);
 
   do {
+    // Asciiverse: the voyage ends here, won or lost
+    if (VOY.game_over || voyage_check_end()) {
+      return;
+    }
+    voyage_save();  // a fresh save every time we're back on this screen
     i_menu.set_data("text_date", WORLD.get_date_str());
     i_menu.set_data("num_cash", PLR.cash);
     i_menu.set_data("num_debt", PLR.debt);
     i_menu.set_data("text_news", WORLD.get_news());
     i_menu.draw(&w_menu);
+    voyage_overlay(w_menu);
+    w_menu.refresh();
     char ch = getch();
+    voyage_log("main key %d cash %d debt %d", int(ch), PLR.cash, PLR.debt);
     switch (ch) {
       case 's':
       case 'S':
@@ -92,9 +101,20 @@ view specific help for that screen.\n\
 Press <c=magenta>Enter<c=/> or <c=magenta>Esc<c=/> to close this help.");
       break;
 
+      case 'v':
+      case 'V':
+        voyage_survey();
+        break;
+
+      case 'h':
+      case 'H':
+        voyage_hire_crew();
+        break;
+
       case 'q':
       case 'Q':
-        if (query_yn("Really quit (without saving)?")) {
+        if (query_yn("Save and quit?")) {
+          voyage_save();
           return;
         }
         break;
@@ -270,6 +290,10 @@ void trade_screen()
     popup("You are in deep space.  You cannot buy anything here!");
     return;
   }
+  if (market->uncharted) {
+    popup("Nobody lives here.  There is no market on an uncharted world.");
+    return;
+  }
 
   cuss::interface i_trade;
   if (!i_trade.load_from_file("cuss/i_trade.cuss")) {
@@ -313,6 +337,9 @@ void trade_screen()
     lowest_price[i] = 99999;
     highest_price[i] = 0;
     for (int n = 0; n < PLANETS.size(); n++) {
+      if (PLANETS[n].uncharted) {
+        continue;  // Asciiverse: no market out there
+      }
       int tmp_buy  = PLANETS[n].buy_price(  Good_id(i) ),
           tmp_sell = PLANETS[n].sell_price( Good_id(i) );
       if (tmp_buy < lowest_price[i] && tmp_buy > 0) {
@@ -540,6 +567,10 @@ void dock_screen()
   Window w_dock(0, 0, 80, 24);
 
   Planet* market = planet_at(PLR.posx, PLR.posy);
+  if (market && market->uncharted) {
+    popup("There is no dock on an uncharted world.");
+    return;
+  }
   if (!market) {
     debugmsg("Somehow got to the dock while not at a planet!");
     return;
@@ -867,6 +898,9 @@ void travel_screen()
     lowest_price[i] = 99999;
     highest_price[i] = 0;
     for (int n = 0; n < PLANETS.size(); n++) {
+      if (PLANETS[n].uncharted) {
+        continue;  // Asciiverse: no market out there
+      }
       int tmp_buy  = PLANETS[n].buy_price(  Good_id(i) ),
           tmp_sell = PLANETS[n].sell_price( Good_id(i) );
       if (tmp_buy < lowest_price[i] && tmp_buy > 0) {
@@ -918,7 +952,7 @@ void travel_screen()
     }
           
     data << PLANETS[i].name << " ";
-    for (int j = 0; j < 12 - PLANETS[i].name.length(); j++) {
+    for (int j = 0; j < 12 - int(PLANETS[i].name.length()); j++) {
       data << " ";
     }
     if (distance < 10) {
@@ -1424,6 +1458,7 @@ Press <c=magenta>Enter<c=/> or <c=magenta>Esc<c=/> to close this help.");
               PLR.fuel_remaining(), tcost);
       } else {
         PLR.travel_to(sel);
+        voyage_after_travel(sel);  // Asciiverse: pirates on the way
         return;
       }
     } else if (ch == 'q' || ch == 'Q' || ch == KEY_ESC) {

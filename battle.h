@@ -68,7 +68,7 @@ struct Battle
   void add_enemy(Ship enemy);
   void init();
 // In-battle functions
-  void main_loop();
+  int main_loop();  // Asciiverse: 1 won, 0 got away, -1 lost
   void update_ranges();
   void player_turn();
   void enemy_turn();
@@ -79,6 +79,8 @@ struct Battle
   void set_engine_task();
   void set_target(Window &w_battle);
   void display_weapon_symbols();
+  int check_end();  // Asciiverse
+  int crew_task_index();
 };
 
 #endif

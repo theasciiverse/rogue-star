@@ -39,124 +39,127 @@ void Battle::init()
   }
 }
 
-void Battle::main_loop()
+int Battle::main_loop()
 {
-  cuss::interface i_battle;
-  if (!i_battle.load_from_file("cuss/i_battle.cuss")) {
-    debugmsg("Couldn't load cuss/i_battle.cuss");
+// Asciiverse: Whales' battle screen layout (cuss/i_battle.cuss) was never
+// finished and draws none of its fields, so the battle is drawn here, plain,
+// over his battle rules (update_ranges, player_turn, enemy_turn).
+  Window w(0, 0, 80, 24);
+  std::vector<std::string> log;
+  if (target < 0 && !enemies.empty()) {
+    target = 0;
   }
-
-  Window w_battle(0, 0, 80, 24);
-
-  i_battle.set_data("text_player", PLR.name);
-
-  bool done = false;
-  while (!done) {
-// Start by populating all fields
-    i_battle.set_data("num_player_crew", PLR.crew_amount);
-    i_battle.set_data("num_player_crew_skeleton", PLR.skeleton_crew());
-    i_battle.set_data("num_player_crew_full", PLR.full_crew());
-    i_battle.set_data("num_player_speed", PLR.combat_speed());
-    i_battle.set_data("text_player_armor", PLR.armor_meter());
-    i_battle.set_data("text_player_shields", PLR.shields_meter());
-    std::vector<std::string> player_parts, player_parts_hp;
-    for (int i = 0; i < PLR.parts.size(); i++) {
-      player_parts.push_back( PLR.parts[i].type->name );
-      std::stringstream hp_text;
-      hp_text << PLR.parts[i].hp_color_tag() << PLR.parts[i].hp << "<c=/>";
-      player_parts_hp.push_back( hp_text.str() );
+  while (true) {
+    for (int i = 0; i < messages.size(); i++) {
+      log.push_back(messages[i]);
     }
-    i_battle.set_data("list_player_parts",    player_parts);
-    i_battle.set_data("list_player_parts_hp", player_parts_hp);
-    i_battle.set_data("text_crew_status",     Crew_task_name[crew]);
-    i_battle.set_data("text_engine_status",   Engine_task_name[engine]);
-    if (!messages.empty()) {
-      i_battle.add_data("text_messages",        messages);
-      i_battle.add_data("text_messages", messages.size() - 5); // to bottom
-      messages.clear();
+    messages.clear();
+    while (log.size() > 9) {
+      log.erase(log.begin());
     }
-
+    w.clear();
+    w.putstr(1, 0, c_yellow, c_black, "SHIP TO SHIP");
+    w.putstr(48, 0, c_dkgray, c_black, "Space: next turn   ?: help");
+    std::stringstream crew;
+    crew << "Crew " << PLR.crew_amount << " (needs " << PLR.skeleton_crew()
+         << ", full " << PLR.full_crew() << ")";
+    w.putstr(1, 2, c_white, c_black, PLR.name);
+    w.putstr(1, 3, c_ltgray, c_black, crew.str());
+    w.putstr(1, 4, c_ltgray, c_black, "Armor   " + PLR.armor_meter());
+    w.putstr(1, 5, c_ltgray, c_black, "Shields " + PLR.shields_meter());
+    w.putstr(1, 6, c_ltgray, c_black, "Crew task:   " + Crew_task_name[crew_task_index()]);
+    w.putstr(1, 7, c_ltgray, c_black, "Engine task: " + Engine_task_name[engine]);
     for (int i = 0; i < enemies.size() && i < 3; i++) {
-      std::stringstream enemy_num_ss;
-      Ship* ship = &(enemies[i].ship);
-      enemy_num_ss << (i + 1);
-      std::string num = enemy_num_ss.str();
-      std::string ele_enemy   = "text_enemy_"         + num,
-                  ele_armor   = "text_enemy_armor_"   + num,
-                  ele_shields = "text_enemy_shields_" + num,
-                  ele_engines = "text_enemy_engines_" + num,
-                  ele_speed   = "num_enemy_speed_"    + num,
-                  ele_range   = "num_enemy_range_"    + num,
-                  ele_weapons = "text_enemy_weapons_" + num;
-      i_battle.set_data(ele_enemy,   ship->name            );
-      i_battle.set_data(ele_armor,   ship->armor_meter()   );
-      i_battle.set_data(ele_shields, ship->shields_meter() );
-      i_battle.set_data(ele_engines, ship->engine_meter()  );
-      i_battle.set_data(ele_speed,   ship->combat_speed()  );
-      i_battle.set_data(ele_range,   enemies[i].range      );
-      i_battle.set_data(ele_weapons, ship->weapon_symbols());
+      Ship* en = &(enemies[i].ship);
+      int y = 2 + i * 4;
+      std::stringstream rng_ss;
+      rng_ss << "range " << enemies[i].range << ", crew " << en->crew_amount;
+      w.putstr(42, y, (i == target ? c_ltred : c_white), c_black,
+               (i == target ? "> " : "  ") + en->name);
+      w.putstr(44, y + 1, c_ltgray, c_black, rng_ss.str());
+      w.putstr(44, y + 2, c_ltgray, c_black, "Armor " + en->armor_meter());
+      w.putstr(44, y + 3, c_ltgray, c_black, "Shields " + en->shields_meter());
     }
-    i_battle.draw(&w_battle);
-// We do these manual drawing functions after drawing the interface, since they
-// are "on top" of the interface
-    switch (target) {
-      case 0:
-        for (int y = 4; y <= 10; y++) {
-          w_battle.putch(51, y, c_red, c_black, LINE_XOXO);
-        }
-        w_battle.putch(51, 3, c_red, c_black, LINE_OXXO);
-        for (int x = 52; x <= 54; x++) {
-          w_battle.putch(x, 3, c_red, c_black, LINE_OXOX);
-        }
-        w_battle.putch(55, 3, c_red, c_black, '>');
-        break;
+    for (int i = 0; i < log.size(); i++) {
+      w.putstr(1, 13 + i, c_ltgray, c_black, log[i]);
+    }
+    w.putstr(1, 23, c_dkgray, c_black,
+             "C crew task   E engine (close in, evade, flee)   T target");
+    w.refresh();
 
-      case 1:
-        for (int x = 52; x <= 54; x++) {
-          w_battle.putch(x, 11, c_red, c_black, LINE_OXOX);
-        }
-        w_battle.putch(55, 11, c_red, c_black, '>');
-        break;
-
-      case 2:
-        for (int y = 12; y <= 19; y++) {
-          w_battle.putch(51, y, c_red, c_black, LINE_XOXO);
-        }
-        w_battle.putch(51, 19, c_red, c_black, LINE_XXOO);
-        for (int x = 52; x <= 54; x++) {
-          w_battle.putch(x, 19, c_red, c_black, LINE_OXOX);
-        }
-        w_battle.putch(55, 19, c_red, c_black, '>');
-        break;
-    }
-    if (enemies.size() < 3) {
-      w_battle.clear_area(56, 16, 79, 22);
-    }
-    if (enemies.size() < 2) {
-      w_battle.clear_area(56,  8, 79, 14);
-    }
-
-    w_battle.refresh();
-        
     long ch = getch();
-
-    if (ch == ' ' || ch == '\n') {
-// TODO: Confirm if no target, confirm if no crew task, etc.
+    if (ch == ' ' || ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+      if (target < 0 && !enemies.empty()) {
+        target = 0;
+      }
       update_ranges();
       player_turn();
       enemy_turn();
+      int result = check_end();
+      if (result != 2) {
+        for (int i = 0; i < messages.size(); i++) {
+          log.push_back(messages[i]);
+        }
+        messages.clear();
+        return result;
+      }
     } else if (ch == 'c' || ch == 'C') {
       set_crew_task();
     } else if (ch == 'e' || ch == 'E') {
       set_engine_task();
     } else if (ch == 't' || ch == 'T') {
-      set_target(w_battle);
-    } else if (ch == '!') {
-      display_weapon_symbols();
-    } else {
-      i_battle.handle_keypress(ch);
+      if (!enemies.empty()) {
+        target = (target + 1) % enemies.size();
+      }
+    } else if (ch == '?') {
+      popup_scrollable("\
+<c=yellow>Ship to ship<c=/>\n\n\
+Each turn your guns fire at your target as they charge.  Press \
+<c=magenta>Space<c=/> to play a turn.\n\n\
+<c=magenta>T<c=/>  change target\n\
+<c=magenta>C<c=/>  set your crew's task: repair, fix EMP, help the engine, \
+or man the weapons\n\
+<c=magenta>E<c=/>  set the engine: evade, close in, or flee\n\n\
+A ship whose crew is lost is out of the fight.  Flee far enough and they \
+lose you.\n\n\
+Press <c=magenta>Enter<c=/> or <c=magenta>Esc<c=/> to close this help.");
     }
   }
+  return 0;
+}
+
+int Battle::crew_task_index()
+{
+  return int(crew);
+}
+
+// Asciiverse: a battle ends when one side has no crew left, or when every
+// enemy has been left far behind.  Returns 2 while the fight goes on.
+int Battle::check_end()
+{
+  for (int i = 0; i < enemies.size(); i++) {
+    if (enemies[i].ship.crew_amount <= 0) {
+      add_message(enemies[i].ship.name + " falls silent: its crew is lost!");
+      enemies.erase(enemies.begin() + i);
+      i--;
+    }
+  }
+  if (target >= int(enemies.size())) {
+    target = (enemies.empty() ? -1 : 0);
+  }
+  if (PLR.crew_amount <= 0) {
+    return -1;
+  }
+  if (enemies.empty()) {
+    return 1;
+  }
+  bool all_far = true;
+  for (int i = 0; i < enemies.size(); i++) {
+    if (enemies[i].range < 2500) {
+      all_far = false;
+    }
+  }
+  return (all_far ? 0 : 2);
 }
 
 void Battle::update_ranges()
@@ -166,6 +169,10 @@ void Battle::update_ranges()
     speed *= 1.1;
   }
   switch (engine) {
+    case ENGINE_JUMP:   // Asciiverse: jumping away is fleeing at full burn
+      for (int i = 0; i < enemies.size(); i++) {
+        enemies[i].range += speed;
+      }
     case ENGINE_FLEE:
       for (int i = 0; i < enemies.size(); i++) {
         enemies[i].range += speed;

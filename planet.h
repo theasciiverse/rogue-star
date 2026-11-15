@@ -35,6 +35,11 @@ struct Planet
 
   std::vector<Planet_property> properties;
 
+// Asciiverse: worlds off the charts, to land on and survey
+  bool uncharted;
+  bool surveyed;
+  int find;   // 0 nothing special, 1 a Precursor fragment, 2 the Vault
+
   int supply[NUM_GOODS]; // High supply drives the price down
   int demand[NUM_GOODS]; // High demand drives the price up
 /*
